@@ -9,3 +9,5 @@ pandas
 imageio
 matplotlib
 ipykernel
+numpy
+future
