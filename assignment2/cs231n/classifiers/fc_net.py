@@ -74,7 +74,13 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        for l, (i, j) in enumerate(zip([input_dim, *hidden_dims], [*hidden_dims, num_classes])):
+            self.params[f'W{l+1}'] = np.random.randn(i, j) * weight_scale
+            self.params[f'b{l+1}'] = np.zeros(j)
+
+            if self.normalization and l < self.num_layers-1:
+                self.params[f'gamma{l+1}'] = np.ones(j)
+                self.params[f'beta{l+1}'] = np.zeros(j)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -148,7 +154,30 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # 我们网络的结果是这样的 {affine - [batch/layer norm] - relu - [dropout]} x (L - 1) - affine - softmax
+
+        # 用一个变量保存上一层的输出
+        layer_input = X
+        caches = {}
+        # 对前面 L - 1层进行操作，因为最后一层的操作和前面的不一样
+        for i in range(1, self.num_layers):
+            W = self.params[f'W{i}']
+            b = self.params[f'b{i}']
+            if self.normalization == 'batchnorm':
+                gamma = self.params[f'gamma{i}']
+                beta = self.params[f'beta{i}']
+                layer_input, caches[f'layer{i}'] = affine_bn_relu_forward(layer_input, W, b, gamma, beta, self.bn_params[i - 1])
+            else:
+                layer_input, caches[f'layer{i}'] = affine_relu_forward(layer_input, W, b)
+            if self.use_dropout:  # 如果使用dropout
+                layer_input, caches[f'dropout{i}'] = dropout_forward(layer_input, self.dropout_param)
+
+        # 最后一层的操作
+        W = self.params['W' + str(self.num_layers)]
+        b = self.params['b' + str(self.num_layers)]
+
+        scores, affine_cache = affine_forward(layer_input, W, b)
+        caches['layer' + str(self.num_layers)] = affine_cache
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
@@ -175,7 +204,33 @@ class FullyConnectedNet(object):
         ############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        pass
+        # 计算loss
+        loss, dscores = softmax_loss(scores, y)
+
+        # 先计算最后一层的梯度
+        dx, dw, db = affine_backward(
+            dscores, caches['layer' + str(self.num_layers)])
+        grads['W' + str(self.num_layers)] = dw + self.reg * \
+            self.params['W' + str(self.num_layers)]
+        grads['b' + str(self.num_layers)] = db
+
+        for i in range(self.num_layers - 1, 0, -1):
+            if self.use_dropout:  # dropout层的梯度
+                dx = dropout_backward(dx, caches[f'dropout{i}'])
+            if self.normalization == 'batchnorm':
+                dx, dw, db, dgamma, dbeta = affine_bn_relu_backward(
+                    dx, caches[f'layer{i}'])
+                grads[f'gamma{i}'] = dgamma
+                grads[f'beta{i}'] = dbeta
+            else:
+                dx, dw, db = affine_relu_backward(dx, caches[f'layer{i}'])
+            grads[f'W{i}'] = dw + self.reg * self.params[f'W{i}']
+            grads[f'b{i}'] = db
+
+        # 加上正则化项
+        for i in range(1, self.num_layers + 1):
+            W = self.params[f'W{i}']
+            loss += 0.5 * self.reg * np.sum(W**2)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         ############################################################################
