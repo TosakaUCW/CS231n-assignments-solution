@@ -24,7 +24,7 @@ Solutions for **CS231n** course assignments offered by Stanford University (Spri
 
 ### Assignment 2
 * [Q1](assignment2/FullyConnectedNets.ipynb): Fully-connected Neural Network. (_Done_)
-* [Q2](assignment2/BatchNormalization.ipynb): Batch Normalization. (_Todo_)
+* [Q2](assignment2/BatchNormalization.ipynb): Batch Normalization. (_Done_)
 * [Q3](assignment2/Dropout.ipynb): Dropout. (_Todo_)
 * [Q4](assignment2/ConvolutionalNetworks.ipynb): Convolutional Networks. (_Todo_)
 * [Q5](assignment2/PyTorch.ipynb) _option 1_: PyTorch on CIFAR-10. (_Todo_)
