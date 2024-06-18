@@ -572,8 +572,37 @@ def conv_forward_naive(x, w, b, conv_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape  # x: Input data of shape (N, C, H, W)
+    F, C_w_, HH, WW = w.shape  # w: Filter weights of shape (F, C, HH, WW)
+    stride = conv_param["stride"]  # 步长
+    pad = conv_param["pad"]  # 填充数量
+    
+    H_out = int(1 + (H + 2 * pad - HH) / stride)
+    W_out = int(1 + (W + 2 * pad - WW) / stride)
+    
+    # padding
+    x_pad = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)),
+                   "constant", constant_values=0)
+     
+    # transform to [F x (C * HH * WW)]
+    w_row = w.reshape(F, -1)
+    
+    out = np.zeros((N, F, H_out, W_out))
+    
+    for n in range(N):
+        for f in range(F):
+            for i in range(H_out):
+                for j in range(W_out):
+                    # 获取当前卷积窗口
+                    window = x_pad[n, :, i * stride:i *
+                                   stride + HH, j * stride:j * stride + WW]
+                    # 将卷积窗口拉成一行
+                    window_row = window.reshape(1, -1)
+                    # 计算当前卷积窗口和卷积核的卷积结果
+                    out[n, f, i, j] = np.sum(window_row * w_row[f, :]) + b[f]
 
+    x = x_pad
+  
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
     #                             END OF YOUR CODE                            #
@@ -600,7 +629,33 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, w, b, conv_param = cache
+    N, C, H, W = x.shape  # x: Input data of shape (N, C, H, W)
+    F, C_w_, HH, WW = w.shape  # w: Filter weights of shape (F, C, HH, WW)
+    stride = conv_param["stride"]  # 步长
+    pad = conv_param["pad"]  # 填充数量
+
+    H_out = int(1 + (H - HH) / stride)
+    W_out = int(1 + (W - WW) / stride)
+
+    dx = np.zeros_like(x)
+    dw = np.zeros_like(w)
+    db = np.zeros_like(b)
+
+    for n in range(N):
+      for f in range(F):
+          for i in range(H_out):
+              for j in range(W_out):
+                  # 获取当前卷积窗口
+                  window = x[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW]
+                  db[f] += dout[n, f, i, j]
+                  # 计算dw
+                  dw[f] += window * dout[n, f, i, j]
+                  # 计算dx
+                  dx[n, :, i * stride:i * stride + HH, j * stride:j *
+                      stride + WW] += w[f] * dout[n, f, i, j]
+
+    dx = dx[:, :, pad:H - pad, pad:W - pad]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -635,7 +690,22 @@ def max_pool_forward_naive(x, pool_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    stride = pool_param['stride']
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    H_out = 1 + (H - pool_height) // stride
+    W_out = 1 + (W - pool_width) // stride
+
+    out = np.zeros((N, C, H_out, W_out))
+
+    for n in range(N):
+        for c in range(C):
+            for i in range(H_out):
+                for j in range(W_out):
+                    window = x[n, c, i * stride:i * stride +
+                               pool_height, j * stride:j * stride + pool_width]
+                    out[n, c, i, j] = np.max(window)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -661,7 +731,26 @@ def max_pool_backward_naive(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, pool_param = cache
+    N, C, H, W = x.shape
+    stride = pool_param['stride']
+    pool_height = pool_param['pool_height']
+    pool_width = pool_param['pool_width']
+    
+    H_out = 1 + (H - pool_height) // stride
+    W_out = 1 + (W - pool_width) // stride
+
+    dx = np.zeros_like(x)
+
+    for n in range(N):
+        for c in range(C):
+            for i in range(H_out):
+                for j in range(W_out):
+                    window = x[n, c, i * stride:i * stride +
+                               pool_height, j * stride:j * stride + pool_width]
+                    max_index = np.argmax(window)
+                    dx[n, c, i * stride + max_index // pool_width,
+                        j * stride + max_index % pool_width] += dout[n, c, i, j]
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -702,7 +791,14 @@ def spatial_batchnorm_forward(x, gamma, beta, bn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape
+    # 将C通道放到最后，然后reshape成二维数组
+    x = np.moveaxis(x, 1, -1).reshape(-1, C)
+    
+    out, cache = batchnorm_forward(x, gamma, beta, bn_param)
+    
+    # 将C通道放到第二维，然后reshape成四维数组
+    out = np.moveaxis(out.reshape(N, H, W, C), -1, 1)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -735,7 +831,10 @@ def spatial_batchnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = dout.shape
+    dout = np.moveaxis(dout, 1, -1).reshape(-1, C)
+    dx, dgamma, dbeta = batchnorm_backward(dout, cache)
+    dx = np.moveaxis(dx.reshape(N, H, W, C), -1, 1)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -776,7 +875,18 @@ def spatial_groupnorm_forward(x, gamma, beta, G, gn_param):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    N, C, H, W = x.shape  # N个样本，C个通道，H高，W宽
+
+    # 将 C 通道分成 G 组，每组有 C // G 个通道
+    x = x.reshape(N, G, C // G, H, W)
+    x_mean = np.mean(x, axis=(2, 3, 4), keepdims=True)
+    x_var = np.var(x, axis=(2, 3, 4), keepdims=True)
+    x_norm = (x - x_mean) / np.sqrt(x_var + eps)
+
+    x_norm = x_norm.reshape(N, C, H, W)
+    out = gamma * x_norm + beta
+
+    cache = (x, x_norm, x_mean, x_var, gamma, beta, G, eps)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
@@ -805,7 +915,23 @@ def spatial_groupnorm_backward(dout, cache):
     ###########################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-    pass
+    x, x_norm, x_mean, x_var, gamma, beta, G, eps = cache
+    N, C, H, W = dout.shape
+
+    dgamma = np.sum(dout * x_norm, axis=(0, 2, 3), keepdims=True)
+    dbeta = np.sum(dout, axis=(0, 2, 3), keepdims=True)
+
+    x = x.reshape(N, G, C // G, H, W)
+
+    m = C // G * H * W
+    dx_norm = (dout * gamma).reshape(N, G, C // G, H, W)
+    dx_var = np.sum(dx_norm * (x - x_mean) * (-0.5) *
+                    np.power((x_var + eps), -1.5), axis=(2, 3, 4), keepdims=True)
+    dx_mean = np.sum(dx_norm * (-1) / np.sqrt(x_var + eps), axis=(2, 3, 4), keepdims=True) + dx_var * np.sum(-2 * (x - x_mean), axis=(2, 3, 4),
+                                                                                                             keepdims=True) / m
+    dx = dx_norm / np.sqrt(x_var + eps) + dx_var * 2 * \
+        (x - x_mean) / m + dx_mean / m
+    dx = dx.reshape(N, C, H, W)
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ###########################################################################
